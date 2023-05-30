@@ -1,26 +1,30 @@
 #include "main.h"
 
-AsyncWebServer server(80);
+SocketIoClient socketIo;
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
 
 void buttonInterrupt()
 {
-  apModeRequested = true;
+  configRequested = true;
 }
 
 void setup()
 {
   Serial.begin(9600);
   ss.begin(9600);
-  pinMode(BUTTON_WIFI_MODE, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(BUTTON_WIFI_MODE), buttonInterrupt, FALLING);
+  pinMode(BTN_EX_CONFIG, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BTN_EX_CONFIG), buttonInterrupt, FALLING);
   initSPIFFS();
-  initWifi();
 
-  String data = readFile(SPIFFS, "/data.txt");
-  Serial.print("data: ");
-  Serial.println(data);
+  socketIo.on("request_transfer", socketOnRequestTransfer);
+  socketIo.begin(SV_HOST, SV_PORT, "/socket.io/?transport=websocket");
+
+  // initWifi();
+
+  // String data = readFile(SPIFFS, "/data.txt");
+  // Serial.print("data: ");
+  // Serial.println(data);
 
   Web3 *web3 = new Web3(SEPOLIA_ID);
 
@@ -44,13 +48,14 @@ void loop()
 {
   while (ss.available() > 0)
   {
+    socketIo.loop();
+
     checkButtonPress();
-    // if (apModeRequested)
-    // {
-    //   startAPMode();
-    //   apModeRequested = false;
-    // }
-    // Serial.println("ss available");
+    if (configRequested)
+    {
+      break;
+    }
+
     if (gps.encode(ss.read()))
     {
       String location = getLocation();
@@ -64,7 +69,7 @@ void loop()
       {
         lastTime = millis();
         Serial.println("write file");
-        writeFile(SPIFFS, "/data.txt", (location + ";" + timestamp).c_str());
+        // writeFile(SPIFFS, "/data.txt", (location + ";" + timestamp).c_str());
         break;
       }
     }
@@ -79,6 +84,71 @@ void loop()
     Serial.println(F("No GPS detected: check wiring."));
     while (true)
       ;
+  }
+
+  while (Serial.available() > 0)
+  {
+    char dataConfig[128];
+    memset(dataConfig, '\0', 128);
+    Serial.readBytesUntil('\n', dataConfig, 128);
+
+    // char *token = strtok(dataConfig, "|");
+    // string strToken = token;
+
+    string temp = dataConfig;
+    temp = temp.substr(0, temp.find('\0')).c_str();
+
+    ss.print("temp: ");
+    ss.println(temp.c_str());
+    bool isAddress = temp.substr(0, 2) == "0x";
+
+    // for (int i = 0; i < 2; i++)
+    // {
+    //   if (i == 0)
+    //   {
+    //     string strToken = token;
+    //     isAddress = strToken.substr(0, 2) == "0x";
+    //     if (isAddress)
+    //     {
+    //       address = token;
+    //     }
+    //     else
+    //     {
+    //       ssid = token;
+    //     }
+    //   }
+    //   else if (i == 1)
+    //   {
+    //     string temp = token;
+    //     if (isAddress)
+    //     {
+    //       privateKey = temp.substr(0, 64).c_str();
+    //     }
+    //     else
+    //     {
+    //       pass = temp.substr(0, temp.find('\0')).c_str();
+    //     }
+    //   }
+    //   token = strtok(NULL, "|");
+    // }
+
+    // const char *token = temp.c_str();
+
+    if (isAddress)
+    {
+      ss.print("blockchain: ");
+      ss.println(temp.c_str());
+      writeFile(SPIFFS, blockchainPath, temp.c_str());
+    }
+    else
+    {
+      ss.print("wifi: ");
+      ss.println(temp.c_str());
+      writeFile(SPIFFS, wifiPath, temp.c_str());
+    }
+
+    delay(2000);
+    ESP.restart();
   }
 }
 
@@ -129,25 +199,63 @@ void initSPIFFS()
     return;
   }
   Serial.println("SPIFFS mounted successfully");
+
+  dataWifi = readFile(SPIFFS, wifiPath);
+  char *temp;
+  strcpy(temp, dataWifi.c_str());
+  char *token = strtok(temp, "|");
+  for (int i = 0; i < 2; i++)
+  {
+    if (i == 0)
+    {
+      ssid = token;
+    }
+    else if (i == 1)
+    {
+      string temp = token;
+      pass = temp.substr(0, temp.find('\0')).c_str();
+    }
+    token = strtok(NULL, "|");
+  }
+
+  dataBlockchain = readFile(SPIFFS, blockchainPath);
+  char *temp2;
+  strcpy(temp2, dataBlockchain.c_str());
+  token = strtok(temp2, "|");
+  for (int i = 0; i < 2; i++)
+  {
+    if (i == 0)
+    {
+      address = token;
+    }
+    else if (i == 1)
+    {
+      string temp = token;
+      privateKey = temp.substr(0, 64).c_str();
+    }
+    token = strtok(NULL, "|");
+  }
 }
 
 void writeFile(fs::FS &fs, const char *path, const char *message)
 {
-  Serial.printf("Writing file: %s\r\n", path);
+  ss.printf("Writing file: %s\r\n", path);
 
   File file = fs.open(path, FILE_WRITE);
   if (!file)
   {
-    Serial.println("Failed to open file for writing");
+    ss.println("Failed to open file for writing");
     return;
   }
+  // clear data in file
+
   if (file.print(message))
   {
-    Serial.println("File written");
+    ss.println("File written");
   }
   else
   {
-    Serial.println("Write failed");
+    ss.println("Write failed");
   }
 }
 
@@ -159,43 +267,21 @@ String readFile(fs::FS &fs, const char *path)
   if (!file || file.isDirectory())
   {
     Serial.println("Failed to open file for reading");
-    return String();
+    return "";
   }
 
-  String fileContent;
+  Serial.println("Read from file: ");
+  String result = "";
   while (file.available())
   {
-    fileContent += String((char)file.read());
+    result += (char)file.read();
   }
-  return fileContent;
+  Serial.println(result);
+  return result;
 }
 
 void initWifi()
 {
-  dataWifi = readFile(SPIFFS, wifiPath);
-
-  int countBreakData = 0;
-  for (int i = 0; i < dataWifi.length(); i++)
-  {
-    if (dataWifi[i] == '|')
-    {
-      countBreakData++;
-      continue;
-    }
-
-    if (countBreakData == 1)
-    {
-      ssid += dataWifi[i];
-    }
-    else if (countBreakData == 0)
-    {
-      pass += dataWifi[i];
-    }
-  }
-
-  ssid = "P5";
-  pass = "anhthien85";
-
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid.c_str(), pass.c_str());
   Serial.print("Connecting to ");
@@ -220,7 +306,7 @@ void initWifi()
 
 void checkButtonPress()
 {
-  int reading = digitalRead(BUTTON_WIFI_MODE); // Read the button state
+  int reading = digitalRead(BTN_EX_CONFIG); // Read the button state
 
   if (reading != lastButtonState)
   {
@@ -275,62 +361,9 @@ void buttonShortPressedAction()
 void buttonLongPressedAction()
 {
   Serial.println("Button long pressed");
-  startAPMode();
 }
 
-void startAPMode()
+void socketOnRequestTransfer(const char *payload, size_t length)
 {
-  WiFi.disconnect();
-  delay(1000);
-
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP("ESP32-AP", "123456789");
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
-
-  dataWifi = "";
-
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(200, "text/html", index_html); });
-
-  server.on("/", HTTP_POST, [](AsyncWebServerRequest *request)
-            {
-              int params = request->params();
-                            for (int i = 0; i < params; i++)
-                            {
-                                AsyncWebParameter *p = request->getParam(i);
-                                if (p->isPost())
-                                {
-                                    // HTTP POST ssid value
-                                    if (p->name() == PARAM_INPUT_1)
-                                    {
-                                          ssid = p->value().c_str();
-                                          Serial.print("SSID set to: ");
-                                          Serial.println(ssid);
-                                          dataWifi += ssid;
-                                    }
-                                    // HTTP POST pass value
-                                    if (p->name() == PARAM_INPUT_2)
-                                    {
-                                          pass = p->value().c_str();
-                                          Serial.print("Password set to: ");
-                                          Serial.println(pass);
-                                          dataWifi += pass;
-                                    }
-
-                                    if (p->name() == PARAM_INPUT_3)
-                                    {
-                                        Serial.println(p->value().c_str());
-                                    }
-                                }
-
-                                dataWifi += "|";
-                            }
-                              Serial.println("Data Wifi: " + dataWifi);
-                              writeFile(SPIFFS, wifiPath, dataWifi.c_str());
-              request->send(200, "text/plain", "Done. ESP will restart, please waiting esp reconnect to new wifi.");
-                               delay(3000);
-                               ESP.restart(); });
-  server.begin();
+  Serial.printf("got socketOnRequestTransfer: %s\n", payload);
 }

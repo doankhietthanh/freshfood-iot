@@ -1,11 +1,10 @@
 #include "ethereum_provider.h"
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
 #include <SPIFFS.h>
 #include <WiFi.h>
 #include <TinyGPSPlus.h>
 #include <SoftwareSerial.h>
+#include <SocketIoClient.h>
 #include <iomanip>
 
 #define MY_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                        // Put your wallet address here
@@ -13,19 +12,24 @@
 #define CONTRACT_ADDRESS "0x7f230Aee231A620EF1Df2DAd0941A061f4151379"                  // put your contract address here
 #define PRIVATE_KEY "871ccd03a445db4f3e42622f423f64be3df9aae5c2b371dd3b842b331ccb16ee" // put your contract address here
 
+#define SV_HOST "be.freshfood.com.vn"
+#define SV_PORT 443
+
 String dataWifi = "";
 String ssid = "";
 String pass = "";
 
+String dataBlockchain = "";
+String address = "";
+String privateKey = "";
+
 static const int RXPin = 12, TXPin = 13;
 
 const char *wifiPath = "/wifi.txt";
-static const char *PARAM_INPUT_1 = "ssid";
-static const char *PARAM_INPUT_2 = "pass";
-static const char *PARAM_INPUT_3 = "private_key";
-static const char *PARAM_INPUT_4 = "gps_serial";
+const char *blockchainPath = "/blockchain.txt";
+const char *gpsPath = "/gps.txt";
 
-#define BUTTON_WIFI_MODE 16
+#define BTN_EX_CONFIG 16
 // Begin Button
 int buttonState = HIGH;                 // Current state of the button
 int lastButtonState = HIGH;             // Previous state of the button
@@ -35,20 +39,19 @@ unsigned long longPressDuration = 1500; // Duration threshold for a long press i
 unsigned long buttonPressStartTime = 0; // Time when the button was pressed
 bool isButtonPressed = false;           // Flag to track button press
 bool isLongPress = false;               // Flag to indicate long press
-volatile bool apModeRequested = false;
+volatile bool configRequested = false;
 // End Button
 
 void initSPIFFS();
 void writeFile(fs::FS &fs, const char *path, const char *message);
 String readFile(fs::FS &fs, const char *path);
 void initWifi();
-void startAPMode();
 void checkButtonPress();
 void buttonShortPressedAction();
 void buttonLongPressedAction();
 String getLocation();
 String getTimestamp();
-std::time_t ConvertToTimestamp(const std::string &datetimeStr);
+void socketOnRequestTransfer(const char *payload, size_t length);
 
 static const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
