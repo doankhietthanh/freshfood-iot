@@ -3,6 +3,8 @@
 SocketIoClient socketIo;
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
+Web3 *web3 = new Web3(FRESHFOOD_ID);
+EthereumProvider ethereumProvider;
 
 void buttonInterrupt()
 {
@@ -16,29 +18,26 @@ void setup()
   pinMode(BTN_EX_CONFIG, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BTN_EX_CONFIG), buttonInterrupt, FALLING);
   initSPIFFS();
+  initWifi();
 
   socketIo.on("request_transfer", socketOnRequestTransfer);
   socketIo.begin(SV_HOST, SV_PORT, "/socket.io/?transport=websocket");
 
-  // initWifi();
-
-  // String data = readFile(SPIFFS, "/data.txt");
-  // Serial.print("data: ");
-  // Serial.println(data);
-
-  Web3 *web3 = new Web3(SEPOLIA_ID);
+  String gpsData = readFile(SPIFFS, gpsPath);
+  Serial.print("gps: ");
+  Serial.println(gpsData);
 
   if (WiFi.status() == WL_CONNECTED)
   {
-    EthereumProvider ethereumProvider(PRIVATE_KEY, TARGET_ADDRESS);
+    ethereumProvider.setAdress(address.c_str());
+    ethereumProvider.setPrivateKey(privateKey.c_str());
     ethereumProvider.setupWeb3(web3);
     ethereumProvider.setContractAddress(CONTRACT_ADDRESS);
 
-    // string result = ethereumProvider.registerOwner("Trinh", "nguoi yeu tui");
-    // Serial.print("registerOwner: ");
-    // Serial.println(result1.c_str());
-
-    ethereumProvider.addLog(3, "delivery", "delivery", "1234567;87654321", 1684736442);
+    string result = ethereumProvider.registerOwner("Trinh", "nguoi yeu tui");
+    Serial.print("registerOwner: ");
+    Serial.println(result.c_str());
+    ethereumProvider.addLog(1, "delivery", "delivery", "1234567;87654321", 1684736442);
   }
 }
 
@@ -46,6 +45,8 @@ uint32_t lastTime = 0;
 
 void loop()
 {
+  bool gpsInitPush = false;
+
   while (ss.available() > 0)
   {
     socketIo.loop();
@@ -65,11 +66,24 @@ void loop()
       Serial.print("Time: ");
       Serial.println(timestamp);
 
-      if (millis() - lastTime > 60000)
+      if (millis() - lastTime > 60000 || !gpsInitPush)
       {
         lastTime = millis();
-        Serial.println("write file");
-        // writeFile(SPIFFS, "/data.txt", (location + ";" + timestamp).c_str());
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+          string result = ethereumProvider.addLog(3, "delivery", "delivery", location.c_str(), timestamp.toInt());
+          if (result.substr(0, 2) == "0x")
+          {
+            writeFile(SPIFFS, gpsPath, (location + ";" + timestamp).c_str());
+          }
+        }
+
+        if (!gpsInitPush)
+        {
+          gpsInitPush = true;
+        }
+
         break;
       }
     }
@@ -98,8 +112,6 @@ void loop()
     string temp = dataConfig;
     temp = temp.substr(0, temp.find('\0')).c_str();
 
-    ss.print("temp: ");
-    ss.println(temp.c_str());
     bool isAddress = temp.substr(0, 2) == "0x";
 
     // for (int i = 0; i < 2; i++)
@@ -147,7 +159,7 @@ void loop()
       writeFile(SPIFFS, wifiPath, temp.c_str());
     }
 
-    delay(2000);
+    delay(1000);
     ESP.restart();
   }
 }
@@ -201,40 +213,49 @@ void initSPIFFS()
   Serial.println("SPIFFS mounted successfully");
 
   dataWifi = readFile(SPIFFS, wifiPath);
-  char *temp;
-  strcpy(temp, dataWifi.c_str());
-  char *token = strtok(temp, "|");
-  for (int i = 0; i < 2; i++)
+  if (dataWifi != "")
   {
-    if (i == 0)
-    {
-      ssid = token;
-    }
-    else if (i == 1)
-    {
-      string temp = token;
-      pass = temp.substr(0, temp.find('\0')).c_str();
-    }
-    token = strtok(NULL, "|");
+    string temp = dataWifi.c_str(); //
+    temp = temp.substr(0, temp.find('\0')).c_str();
+    ssid = temp.substr(0, temp.find('|')).c_str();
+    pass = temp.substr(temp.find('|') + 1, temp.length()).c_str();
   }
 
   dataBlockchain = readFile(SPIFFS, blockchainPath);
-  char *temp2;
-  strcpy(temp2, dataBlockchain.c_str());
-  token = strtok(temp2, "|");
-  for (int i = 0; i < 2; i++)
   {
-    if (i == 0)
-    {
-      address = token;
-    }
-    else if (i == 1)
-    {
-      string temp = token;
-      privateKey = temp.substr(0, 64).c_str();
-    }
-    token = strtok(NULL, "|");
+    string temp = dataBlockchain.c_str();
+    temp = temp.substr(0, temp.find('\0')).c_str();
+    address = temp.substr(0, temp.find('|')).c_str();
+    privateKey = temp.substr(temp.find('|') + 1, temp.length()).c_str();
   }
+
+  Serial.print("ssid: ");
+  Serial.println(ssid);
+  Serial.print("pass: ");
+  Serial.println(pass);
+  Serial.print("address: ");
+  Serial.println(address);
+  Serial.print("privateKey: ");
+  Serial.println(privateKey);
+
+  // char *temp2;
+  // strcpy(temp2, dataBlockchain.c_str());
+  // Serial.print("dataBlockchain: ");
+  // Serial.println(temp2);
+  // token = strtok(temp2, "|");
+  // for (int i = 0; i < 2; i++)
+  // {
+  //   if (i == 0)
+  //   {
+  //     address = token;
+  //   }
+  //   else if (i == 1)
+  //   {
+  //     string temp = token;
+  //     privateKey = temp.substr(0, 64).c_str();
+  //   }
+  //   token = strtok(NULL, "|");
+  // }
 }
 
 void writeFile(fs::FS &fs, const char *path, const char *message)

@@ -21,10 +21,13 @@ private:
 public:
     const char *contractAddress;
     const char *walletAddress;
+    EthereumProvider();
     EthereumProvider(const char *privateKey, const char *walletAddress);
     ~EthereumProvider();
 
     void setupWeb3(Web3 *web3);
+    void setAdress(const char *walletAddress);
+    void setPrivateKey(const char *privateKey);
     void setContractAddress(const char *contractAddress);
     double getBalance(const char *address);
     string sendETHToAddress(uint256_t amount);

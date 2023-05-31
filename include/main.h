@@ -16,12 +16,12 @@
 #define SV_PORT 443
 
 String dataWifi = "";
-String ssid = "";
-String pass = "";
+String ssid = "P5";
+String pass = "anhthien85";
 
 String dataBlockchain = "";
-String address = "";
-String privateKey = "";
+String address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8 ";
+String privateKey = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 static const int RXPin = 12, TXPin = 13;
 

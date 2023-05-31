@@ -1,5 +1,9 @@
 #include "ethereum_provider.h"
 
+EthereumProvider::EthereumProvider()
+{
+}
+
 EthereumProvider::EthereumProvider(const char *privateKey, const char *walletAddress)
 {
     this->privateKey = privateKey;
@@ -13,6 +17,16 @@ EthereumProvider::~EthereumProvider()
 void EthereumProvider::setupWeb3(Web3 *web3)
 {
     this->web3 = web3;
+}
+
+void EthereumProvider::setAdress(const char *walletAddress)
+{
+    this->walletAddress = walletAddress;
+}
+
+void EthereumProvider::setPrivateKey(const char *privateKey)
+{
+    this->privateKey = privateKey;
 }
 
 void EthereumProvider::setContractAddress(const char *contractAddress)
