@@ -8,16 +8,16 @@
 #include <SoftwareSerial.h>
 #include <iomanip>
 
-#define MY_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                        // Put your wallet address here
-#define TARGET_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                    // put your second address here
-#define CONTRACT_ADDRESS "0x7f230Aee231A620EF1Df2DAd0941A061f4151379"                  // put your contract address here
-#define PRIVATE_KEY "871ccd03a445db4f3e42622f423f64be3df9aae5c2b371dd3b842b331ccb16ee" // put your contract address here
+#define MY_ADDRESS "0x90F79bf6EB2c4f870365E785982E1f101E93b906"                          // Put your wallet address here
+#define TARGET_ADDRESS "0x90F79bf6EB2c4f870365E785982E1f101E93b906"                      // put your second address here
+#define PRIVATE_KEY "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6" // put your contract address here
+#define CONTRACT_ADDRESS "0x5FbDB2315678afecb367f032d93F642f64180aa3"                    // put your contract address here
 
 String dataWifi = "";
 String ssid = "";
 String pass = "";
 
-static const int RXPin = 12, TXPin = 13;
+static const int RXPin = 13, TXPin = 12;
 
 const char *wifiPath = "/wifi.txt";
 static const char *PARAM_INPUT_1 = "ssid";
@@ -26,6 +26,8 @@ static const char *PARAM_INPUT_3 = "private_key";
 static const char *PARAM_INPUT_4 = "gps_serial";
 
 #define BUTTON_WIFI_MODE 16
+#define FLASH_LED 4
+
 // Begin Button
 int buttonState = HIGH;                 // Current state of the button
 int lastButtonState = HIGH;             // Previous state of the button

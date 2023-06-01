@@ -3,6 +3,8 @@
 AsyncWebServer server(80);
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
+Web3 *web3 = new Web3(HARDHAT_ID);
+EthereumProvider ethereumProvider(PRIVATE_KEY, MY_ADDRESS);
 
 void buttonInterrupt()
 {
@@ -14,6 +16,9 @@ void setup()
   Serial.begin(9600);
   ss.begin(9600);
   pinMode(BUTTON_WIFI_MODE, INPUT_PULLUP);
+  pinMode(FLASH_LED, OUTPUT);
+  digitalWrite(FLASH_LED, LOW);
+
   attachInterrupt(digitalPinToInterrupt(BUTTON_WIFI_MODE), buttonInterrupt, FALLING);
   initSPIFFS();
   initWifi();
@@ -22,19 +27,19 @@ void setup()
   Serial.print("data: ");
   Serial.println(data);
 
-  Web3 *web3 = new Web3(SEPOLIA_ID);
-
   if (WiFi.status() == WL_CONNECTED)
   {
-    EthereumProvider ethereumProvider(PRIVATE_KEY, TARGET_ADDRESS);
     ethereumProvider.setupWeb3(web3);
     ethereumProvider.setContractAddress(CONTRACT_ADDRESS);
 
-    // string result = ethereumProvider.registerOwner("Trinh", "nguoi yeu tui");
-    // Serial.print("registerOwner: ");
-    // Serial.println(result1.c_str());
+    String ownerName = "Device 2";
+    String ownerDesc = "Delivery";
 
-    ethereumProvider.addLog(3, "delivery", "delivery", "1234567;87654321", 1684736442);
+    digitalWrite(FLASH_LED, HIGH);
+    string result = ethereumProvider.registerOwner(ownerName.c_str(), ownerDesc.c_str());
+    Serial.print("registerOwner: ");
+    Serial.println(result.c_str());
+    digitalWrite(FLASH_LED, LOW);
   }
 }
 
@@ -63,6 +68,13 @@ void loop()
       if (millis() - lastTime > 60000)
       {
         lastTime = millis();
+        if (WiFi.status() == WL_CONNECTED)
+        {
+          digitalWrite(FLASH_LED, HIGH);
+          uint256_t productId = 0;
+          ethereumProvider.addLog(productId, "delivery", "delivery", location.c_str(), timestamp.c_str());
+          digitalWrite(FLASH_LED, LOW);
+        }
         Serial.println("write file");
         writeFile(SPIFFS, "/data.txt", (location + ";" + timestamp).c_str());
         break;
@@ -117,6 +129,7 @@ String getTimestamp()
   Serial.print(dhy + " " + hms);
 
   time_t timestamp = mktime(&timeNow);
+
   String result = String(timestamp);
   return result;
 }
