@@ -2,6 +2,8 @@
   "files.associations": {
     "string": "cpp",
     "string_view": "cpp",
-    "*.include": "cpp"
+    "*.include": "cpp",
+    "limits": "cpp",
+    "*.tcc": "cpp"
   }
 }

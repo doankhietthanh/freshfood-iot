@@ -1,4 +1,5 @@
 #include "ethereum_provider.h"
+#include <iomanip>
 
 EthereumProvider::EthereumProvider()
 {
@@ -85,7 +86,7 @@ string EthereumProvider::sendETHToAddress(uint256_t amount)
     return transactionHash;
 }
 
-string EthereumProvider::addLog(uint256_t productId, string objectId, string hash, string location, uint256_t timestamp)
+string EthereumProvider::addLog(uint256_t productId, string objectId, string hash, string location, string timestamp)
 {
     Contract contract(web3, this->contractAddress);
     contract.SetPrivateKey(this->privateKey);
@@ -118,8 +119,10 @@ string EthereumProvider::addLog(uint256_t productId, string objectId, string has
         ret += "0000000000000000000000000000000000000000000000000000000000000120";
 
         // convert timestamp to hex
-        bits = timestamp.export_bits();
-        ret += Util::PlainVectorToString(&bits);
+        int timestampInt = stoi(timestamp);
+        std::stringstream ssTime;
+        ssTime << std::hex << std::setw(64) << std::setfill('0') << timestampInt;
+        ret += ssTime.str();
 
         // convert objectId to hex
         ret += GenerateIntToHex(objectId.length());

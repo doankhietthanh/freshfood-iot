@@ -6,6 +6,8 @@ SoftwareSerial ss(RXPin, TXPin);
 Web3 *web3 = new Web3(FRESHFOOD_ID);
 EthereumProvider ethereumProvider;
 
+uint32_t lastTime = 0;
+
 void buttonInterrupt()
 {
   configRequested = true;
@@ -17,150 +19,47 @@ void setup()
   ss.begin(9600);
   pinMode(BTN_EX_CONFIG, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BTN_EX_CONFIG), buttonInterrupt, FALLING);
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_WIFI, OUTPUT);
+  pinMode(LED_BLOCKCHAIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_WIFI, LOW);
+  digitalWrite(LED_BLOCKCHAIN, LOW);
+
   initSPIFFS();
   initWifi();
 
   socketIo.on("request_transfer", socketOnRequestTransfer);
   socketIo.begin(SV_HOST, SV_PORT, "/socket.io/?transport=websocket");
 
-  String gpsData = readFile(SPIFFS, gpsPath);
+  dataGPS = readFile(SPIFFS, gpsPath);
   Serial.print("gps: ");
-  Serial.println(gpsData);
+  Serial.println(dataGPS);
 
-  if (WiFi.status() == WL_CONNECTED)
+  if (wifiStatus())
   {
     ethereumProvider.setAdress(address.c_str());
     ethereumProvider.setPrivateKey(privateKey.c_str());
     ethereumProvider.setupWeb3(web3);
     ethereumProvider.setContractAddress(CONTRACT_ADDRESS);
 
-    string result = ethereumProvider.registerOwner("Trinh", "nguoi yeu tui");
-    Serial.print("registerOwner: ");
-    Serial.println(result.c_str());
-    ethereumProvider.addLog(1, "delivery", "delivery", "1234567;87654321", 1684736442);
+    // string result = ethereumProvider.registerOwner("GPS device", "Blockchain IoT");
+    // Serial.print("registerOwner: ");
+    // Serial.println(result.c_str());
   }
 }
 
-uint32_t lastTime = 0;
-
 void loop()
 {
-  bool gpsInitPush = false;
-
-  while (ss.available() > 0)
+  if (configRequested)
   {
-    socketIo.loop();
-
-    checkButtonPress();
-    if (configRequested)
-    {
-      break;
-    }
-
-    if (gps.encode(ss.read()))
-    {
-      String location = getLocation();
-      Serial.print("Location: ");
-      Serial.println(location);
-      String timestamp = getTimestamp();
-      Serial.print("Time: ");
-      Serial.println(timestamp);
-
-      if (millis() - lastTime > 60000 || !gpsInitPush)
-      {
-        lastTime = millis();
-
-        if (WiFi.status() == WL_CONNECTED)
-        {
-          string result = ethereumProvider.addLog(3, "delivery", "delivery", location.c_str(), timestamp.toInt());
-          if (result.substr(0, 2) == "0x")
-          {
-            writeFile(SPIFFS, gpsPath, (location + ";" + timestamp).c_str());
-          }
-        }
-
-        if (!gpsInitPush)
-        {
-          gpsInitPush = true;
-        }
-
-        break;
-      }
-    }
-    else
-    {
-      // Serial.println("gps not encode");
-    }
+    Serial.println("Config requested");
+    configMode();
+    configRequested = false;
   }
-
-  if (millis() > 5000 && gps.charsProcessed() < 10)
+  else
   {
-    Serial.println(F("No GPS detected: check wiring."));
-    while (true)
-      ;
-  }
-
-  while (Serial.available() > 0)
-  {
-    char dataConfig[128];
-    memset(dataConfig, '\0', 128);
-    Serial.readBytesUntil('\n', dataConfig, 128);
-
-    // char *token = strtok(dataConfig, "|");
-    // string strToken = token;
-
-    string temp = dataConfig;
-    temp = temp.substr(0, temp.find('\0')).c_str();
-
-    bool isAddress = temp.substr(0, 2) == "0x";
-
-    // for (int i = 0; i < 2; i++)
-    // {
-    //   if (i == 0)
-    //   {
-    //     string strToken = token;
-    //     isAddress = strToken.substr(0, 2) == "0x";
-    //     if (isAddress)
-    //     {
-    //       address = token;
-    //     }
-    //     else
-    //     {
-    //       ssid = token;
-    //     }
-    //   }
-    //   else if (i == 1)
-    //   {
-    //     string temp = token;
-    //     if (isAddress)
-    //     {
-    //       privateKey = temp.substr(0, 64).c_str();
-    //     }
-    //     else
-    //     {
-    //       pass = temp.substr(0, temp.find('\0')).c_str();
-    //     }
-    //   }
-    //   token = strtok(NULL, "|");
-    // }
-
-    // const char *token = temp.c_str();
-
-    if (isAddress)
-    {
-      ss.print("blockchain: ");
-      ss.println(temp.c_str());
-      writeFile(SPIFFS, blockchainPath, temp.c_str());
-    }
-    else
-    {
-      ss.print("wifi: ");
-      ss.println(temp.c_str());
-      writeFile(SPIFFS, wifiPath, temp.c_str());
-    }
-
-    delay(1000);
-    ESP.restart();
+    gpsMode();
   }
 }
 
@@ -228,34 +127,6 @@ void initSPIFFS()
     address = temp.substr(0, temp.find('|')).c_str();
     privateKey = temp.substr(temp.find('|') + 1, temp.length()).c_str();
   }
-
-  Serial.print("ssid: ");
-  Serial.println(ssid);
-  Serial.print("pass: ");
-  Serial.println(pass);
-  Serial.print("address: ");
-  Serial.println(address);
-  Serial.print("privateKey: ");
-  Serial.println(privateKey);
-
-  // char *temp2;
-  // strcpy(temp2, dataBlockchain.c_str());
-  // Serial.print("dataBlockchain: ");
-  // Serial.println(temp2);
-  // token = strtok(temp2, "|");
-  // for (int i = 0; i < 2; i++)
-  // {
-  //   if (i == 0)
-  //   {
-  //     address = token;
-  //   }
-  //   else if (i == 1)
-  //   {
-  //     string temp = token;
-  //     privateKey = temp.substr(0, 64).c_str();
-  //   }
-  //   token = strtok(NULL, "|");
-  // }
 }
 
 void writeFile(fs::FS &fs, const char *path, const char *message)
@@ -382,6 +253,125 @@ void buttonShortPressedAction()
 void buttonLongPressedAction()
 {
   Serial.println("Button long pressed");
+}
+
+bool wifiStatus()
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    digitalWrite(LED_WIFI, HIGH);
+    Serial.println("Wifi disconnected");
+    return false;
+  }
+
+  digitalWrite(LED_WIFI, LOW);
+  return true;
+}
+
+bool transtactionStatus(string hash)
+{
+  if (hash.substr(0, 2) != "0x")
+  {
+    return false;
+  }
+  return true;
+}
+
+void gpsMode()
+{
+
+  while (ss.available() > 0)
+  {
+    // socketIo.loop();
+
+    if (configRequested)
+    {
+      Serial.println("Press btn ex config");
+      break;
+    }
+
+    if (gps.encode(ss.read()))
+    {
+
+      String location = getLocation();
+      Serial.print("Location: ");
+      Serial.println(location);
+      String timestamp = getTimestamp();
+      Serial.print("Time: ");
+      Serial.println(timestamp);
+
+      if (millis() - lastTime > 60000 || !gpsInitPush)
+      {
+        lastTime = millis();
+
+        if (wifiStatus())
+        {
+          digitalWrite(LED_BLOCKCHAIN, HIGH);
+          if (location != "" && timestamp != "")
+          {
+            string result = ethereumProvider.addLog(productId, "delivery", "delivery", location.c_str(), timestamp.c_str());
+            if (transtactionStatus(result))
+            {
+              writeFile(SPIFFS, gpsPath, (location + ";" + timestamp).c_str());
+            }
+          }
+          else
+          {
+            string gpsTemp = dataGPS.c_str(); //
+            gpsTemp = gpsTemp.substr(0, gpsTemp.find('\0')).c_str();
+            string locationTemp = gpsTemp.substr(0, gpsTemp.find(';')).c_str();
+            string timeTemp = gpsTemp.substr(gpsTemp.find(';') + 1, gpsTemp.length()).c_str();
+            if (locationTemp == "" || timeTemp == "")
+            {
+              locationTemp = "0,0";
+              timeTemp = "0";
+            }
+            string result = ethereumProvider.addLog(productId, "delivery", "delivery", locationTemp.c_str(), timeTemp.c_str());
+          }
+          digitalWrite(LED_BLOCKCHAIN, LOW);
+        }
+
+        if (!gpsInitPush)
+        {
+          gpsInitPush = true;
+        }
+
+        break;
+      }
+    }
+  }
+}
+
+void configMode()
+{
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  while (Serial.available() > 0)
+  {
+    Serial.println("Ex config available");
+
+    char dataConfig[128];
+    memset(dataConfig, '\0', 128);
+    Serial.readBytesUntil('\n', dataConfig, 128);
+
+    string temp = dataConfig;
+    temp = temp.substr(0, temp.find('\0')).c_str();
+
+    bool isAddress = temp.substr(0, 2) == "0x";
+
+    if (isAddress)
+    {
+      writeFile(SPIFFS, blockchainPath, temp.c_str());
+      digitalWrite(LED_BUILTIN, LOW);
+      ESP.restart();
+    }
+    else
+    {
+      writeFile(SPIFFS, wifiPath, temp.c_str());
+      digitalWrite(LED_BUILTIN, LOW);
+      ESP.restart();
+    }
+  }
 }
 
 void socketOnRequestTransfer(const char *payload, size_t length)

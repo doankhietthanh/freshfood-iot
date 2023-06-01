@@ -33,7 +33,7 @@ public:
     string sendETHToAddress(uint256_t amount);
     string checkStr(string txt);
 
-    string addLog(uint256_t productId, string objectId, string hash, string location, uint256_t timestamp);
+    string addLog(uint256_t productId, string objectId, string hash, string location, string timestamp);
     string registerOwner(string name, string description);
 };
 
