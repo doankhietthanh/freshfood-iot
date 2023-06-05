@@ -5,12 +5,16 @@
 #include <TinyGPSPlus.h>
 #include <SoftwareSerial.h>
 #include <SocketIoClient.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include <iomanip>
 
-#define MY_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                        // Put your wallet address here
-#define TARGET_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                    // put your second address here
-#define CONTRACT_ADDRESS "0x5FbDB2315678afecb367f032d93F642f64180aa3"                  // put your contract address here
-#define PRIVATE_KEY "871ccd03a445db4f3e42622f423f64be3df9aae5c2b371dd3b842b331ccb16ee" // put your contract address here
+// #define MY_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                        // Put your wallet address here
+// #define TARGET_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                    // put your second address here
+#define CONTRACT_ADDRESS "0x5FbDB2315678afecb367f032d93F642f64180aa3" // put your contract address here
+// #define PRIVATE_KEY "871ccd03a445db4f3e42622f423f64be3df9aae5c2b371dd3b842b331ccb16ee" // put your contract address here
+
+String serverName = "https://be.freshfood.lalo.com.vn/";
 
 #define SV_HOST "be.freshfood.com.vn"
 #define SV_PORT 443
@@ -22,8 +26,10 @@ String pass = "anhthien85";
 String dataBlockchain = "";
 String address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8 ";
 String privateKey = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-uint256_t productId = 1;
+uint256_t productId;
+JsonArray stations;
 
+#define THREADHOLD_DISTANCE 100 // 100m
 String dataGPS = "";
 
 static const int RXPin = 26, TXPin = 27;
@@ -34,7 +40,7 @@ const char *gpsPath = "/gps.txt";
 
 #define LED_BUILTIN 2
 #define LED_WIFI 4
-#define LED_BLOCKCHAIN 2
+#define LED_BLOCKCHAIN 15
 
 #define BTN_EX_CONFIG 16
 // Begin Button
@@ -65,6 +71,9 @@ void buttonLongPressedAction();
 String getLocation();
 String getTimestamp();
 bool transtactionStatus(string hash);
+DynamicJsonDocument getStationsFromServer(String ownerAddress);
+bool checkDistance(float longitude, float latitude);
+void sendMailToServer(JsonObject object);
 
 void gpsMode();
 void configMode();

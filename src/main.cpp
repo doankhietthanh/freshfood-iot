@@ -1,6 +1,6 @@
 #include "main.h"
 
-SocketIoClient socketIo;
+// SocketIoClient socketIo;
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
 Web3 *web3 = new Web3(FRESHFOOD_ID);
@@ -29,8 +29,8 @@ void setup()
   initSPIFFS();
   initWifi();
 
-  socketIo.on("request_transfer", socketOnRequestTransfer);
-  socketIo.begin(SV_HOST, SV_PORT, "/socket.io/?transport=websocket");
+  // socketIo.on("request_transfer", socketOnRequestTransfer);
+  // socketIo.begin(SV_HOST, SV_PORT, "/socket.io/?transport=websocket");
 
   dataGPS = readFile(SPIFFS, gpsPath);
   Serial.print("gps: ");
@@ -46,6 +46,31 @@ void setup()
     // string result = ethereumProvider.registerOwner("GPS device", "Blockchain IoT");
     // Serial.print("registerOwner: ");
     // Serial.println(result.c_str());
+    DynamicJsonDocument jsonDocument = getStationsFromServer(address);
+
+    JsonObject root = jsonDocument.as<JsonObject>();
+    int productIdInt = root["productId"].as<int>();
+    stations = root["stations"].as<JsonArray>();
+
+    productId = productIdInt;
+
+    for (JsonObject station : stations)
+    {
+      string name = station["name"].as<string>();
+      float longitude = station["longitude"].as<float>();
+      float latitude = station["latitude"].as<float>();
+
+      Serial.print("Name: ");
+      Serial.println(name.c_str());
+
+      Serial.print("Longitude: ");
+      Serial.println(longitude, 6);
+
+      Serial.print("Latitude: ");
+      Serial.println(latitude, 6);
+
+      Serial.println("-----");
+    }
   }
 }
 
@@ -259,12 +284,12 @@ bool wifiStatus()
 {
   if (WiFi.status() != WL_CONNECTED)
   {
-    digitalWrite(LED_WIFI, HIGH);
+    digitalWrite(LED_WIFI, LOW);
     Serial.println("Wifi disconnected");
     return false;
   }
 
-  digitalWrite(LED_WIFI, LOW);
+  digitalWrite(LED_WIFI, HIGH);
   return true;
 }
 
@@ -329,6 +354,43 @@ void gpsMode()
             string result = ethereumProvider.addLog(productId, "delivery", "delivery", locationTemp.c_str(), timeTemp.c_str());
           }
           digitalWrite(LED_BLOCKCHAIN, LOW);
+
+          int checkCounter = 0;
+          std::string productIdStr;
+          productIdStr << productId;
+          JsonObject jsonMail;
+
+          if (stations.size() == 0)
+          {
+            string subject = "#" + productIdStr + " - Transfer to new owner";
+            jsonMail["to"] = "doankhietthanh@gmail.com";
+            jsonMail["subject"] = subject.c_str();
+            jsonMail["name"] = "Doan Khiet Thanh";
+            jsonMail["content"] = "Transfer to new owner successfull";
+
+            sendMailToServer(jsonMail);
+          }
+          else
+          {
+            for (JsonObject station : stations)
+            {
+              string name = station["name"].as<string>();
+              float longitude = station["longitude"].as<float>();
+              float latitude = station["latitude"].as<float>();
+
+              if (checkDistance(latitude, longitude))
+              {
+                // remove station
+                stations.remove(checkCounter);
+                jsonMail["to"] = "doankhietthanh@gmail.com";
+                jsonMail["subject"] = "Product is checked at " + name + " station";
+                jsonMail["name"] = "Doan Khiet Thanh Test";
+                jsonMail["content"] = "checked successfull";
+                sendMailToServer(jsonMail);
+                checkCounter++;
+              }
+            }
+          }
         }
 
         if (!gpsInitPush)
@@ -374,7 +436,52 @@ void configMode()
   }
 }
 
-void socketOnRequestTransfer(const char *payload, size_t length)
+DynamicJsonDocument getStationsFromServer(String ownerAddress)
 {
-  Serial.printf("got socketOnRequestTransfer: %s\n", payload);
+  DynamicJsonDocument doc(4096);
+  HTTPClient http;
+  String query = serverName + "devices/serial/" + ownerAddress;
+  http.begin(query);
+  int httpCode = http.GET();
+  if (httpCode > 0)
+  {
+    String payload = http.getString();
+    deserializeJson(doc, payload);
+  }
+  http.end();
+  return doc;
 }
+
+bool checkDistance(float longitude, float latitude)
+{
+  float distance = gps.distanceBetween(latitude, longitude, gps.location.lat(), gps.location.lng());
+  Serial.print("Distance: ");
+  Serial.println(distance);
+  if (distance <= THREADHOLD_DISTANCE)
+  {
+    return true;
+  }
+  return false;
+}
+
+void sendMailToServer(JsonObject object)
+{
+  String objectString;
+  serializeJson(object, objectString);
+  String query = serverName + "mail/send";
+  HTTPClient http;
+  http.begin(query);
+  http.addHeader("Content-Type", "application/json");
+  int httpCode = http.POST(objectString);
+  if (httpCode > 0)
+  {
+    String payload = http.getString();
+    Serial.println(payload);
+  }
+  http.end();
+}
+
+// void socketOnRequestTransfer(const char *payload, size_t length)
+// {
+//   Serial.printf("got socketOnRequestTransfer: %s\n", payload);
+// }
