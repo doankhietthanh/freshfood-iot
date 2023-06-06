@@ -4,7 +4,6 @@
 #include <WiFi.h>
 #include <TinyGPSPlus.h>
 #include <SoftwareSerial.h>
-#include <SocketIoClient.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <iomanip>
@@ -13,11 +12,16 @@
 // #define TARGET_ADDRESS "0x07Aca15D34f6A01B909267dbBA9139Fbff7c278F"                    // put your second address here
 #define CONTRACT_ADDRESS "0x5FbDB2315678afecb367f032d93F642f64180aa3" // put your contract address here
 // #define PRIVATE_KEY "871ccd03a445db4f3e42622f423f64be3df9aae5c2b371dd3b842b331ccb16ee" // put your contract address here
-
-String serverName = "https://be.freshfood.lalo.com.vn/";
-
+#define LED_BUILTIN 2
+#define LED_WIFI 4
+#define LED_BLOCKCHAIN 15
+#define BTN_EX_CONFIG 16
 #define SV_HOST "be.freshfood.com.vn"
 #define SV_PORT 443
+#define THREADHOLD_DISTANCE 100     // 100m
+#define TIME_PUSH_TRANSACTION 60000 // 1 minute
+
+String serverName = "https://be.freshfood.lalo.com.vn/";
 
 String dataWifi = "";
 String ssid = "P5";
@@ -27,9 +31,12 @@ String dataBlockchain = "";
 String address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8 ";
 String privateKey = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 uint256_t productId;
-JsonArray stations;
 
-#define THREADHOLD_DISTANCE 100 // 100m
+JsonArray stations;
+String stationString;
+size_t stationSize = 0;
+int checkCounter = 0;
+
 String dataGPS = "";
 
 static const int RXPin = 26, TXPin = 27;
@@ -38,11 +45,6 @@ const char *wifiPath = "/wifi.txt";
 const char *blockchainPath = "/blockchain.txt";
 const char *gpsPath = "/gps.txt";
 
-#define LED_BUILTIN 2
-#define LED_WIFI 4
-#define LED_BLOCKCHAIN 15
-
-#define BTN_EX_CONFIG 16
 // Begin Button
 int buttonState = HIGH;                 // Current state of the button
 int lastButtonState = HIGH;             // Previous state of the button
@@ -73,8 +75,7 @@ String getTimestamp();
 bool transtactionStatus(string hash);
 DynamicJsonDocument getStationsFromServer(String ownerAddress);
 bool checkDistance(float longitude, float latitude);
-void sendMailToServer(JsonObject object);
+void sendMailToServer(DynamicJsonDocument jsonDoc);
 
 void gpsMode();
 void configMode();
-void socketOnRequestTransfer(const char *payload, size_t length);

@@ -52,6 +52,10 @@ void setup()
     int productIdInt = root["productId"].as<int>();
     stations = root["stations"].as<JsonArray>();
 
+    // convert stations to store
+    serializeJson(stations, stationString);
+    stationSize = stations.size();
+
     productId = productIdInt;
 
     for (JsonObject station : stations)
@@ -71,11 +75,15 @@ void setup()
 
       Serial.println("-----");
     }
+
+    Serial.print("stations size: ");
+    Serial.println(stations.size());
   }
 }
 
 void loop()
 {
+
   if (configRequested)
   {
     Serial.println("Config requested");
@@ -307,8 +315,6 @@ void gpsMode()
 
   while (ss.available() > 0)
   {
-    // socketIo.loop();
-
     if (configRequested)
     {
       Serial.println("Press btn ex config");
@@ -317,7 +323,6 @@ void gpsMode()
 
     if (gps.encode(ss.read()))
     {
-
       String location = getLocation();
       Serial.print("Location: ");
       Serial.println(location);
@@ -325,7 +330,7 @@ void gpsMode()
       Serial.print("Time: ");
       Serial.println(timestamp);
 
-      if (millis() - lastTime > 60000 || !gpsInitPush)
+      if (millis() - lastTime > TIME_PUSH_TRANSACTION || !gpsInitPush)
       {
         lastTime = millis();
 
@@ -355,14 +360,24 @@ void gpsMode()
           }
           digitalWrite(LED_BLOCKCHAIN, LOW);
 
-          int checkCounter = 0;
-          std::string productIdStr;
-          productIdStr << productId;
-          JsonObject jsonMail;
-
-          if (stations.size() == 0)
+          Serial.println(stationString);
+          DynamicJsonDocument stationJson(4098);
+          DeserializationError error = deserializeJson(stationJson, stationString);
+          JsonArray jsonArray;
+          if (error)
           {
-            string subject = "#" + productIdStr + " - Transfer to new owner";
+            Serial.print("Parsing failed: ");
+            Serial.println(error.c_str());
+          }
+          else
+          {
+            jsonArray = stationJson.as<JsonArray>();
+          }
+
+          DynamicJsonDocument jsonMail(JSON_OBJECT_SIZE(4));
+          if (checkCounter == stationSize)
+          {
+            string subject = "# - Transfer to new owner";
             jsonMail["to"] = "doankhietthanh@gmail.com";
             jsonMail["subject"] = subject.c_str();
             jsonMail["name"] = "Doan Khiet Thanh";
@@ -372,22 +387,45 @@ void gpsMode()
           }
           else
           {
-            for (JsonObject station : stations)
+            int index = 0;
+            for (JsonObject station : jsonArray)
             {
+              if (index < checkCounter)
+              {
+                index++;
+                continue;
+              }
+
+              Serial.print("Index ");
+              Serial.println(index);
+
               string name = station["name"].as<string>();
               float longitude = station["longitude"].as<float>();
               float latitude = station["latitude"].as<float>();
 
               if (checkDistance(latitude, longitude))
               {
-                // remove station
-                stations.remove(checkCounter);
+                Serial.print("Distance to ");
+                Serial.print(name.c_str());
+                Serial.println(" station is less than 100m");
+
+                // string subject = "Product is checked at " + name + " station";
+                char *subject;
+                sprintf(subject, "Product is checked at ", name, "station");
                 jsonMail["to"] = "doankhietthanh@gmail.com";
-                jsonMail["subject"] = "Product is checked at " + name + " station";
+                jsonMail["subject"] = subject;
                 jsonMail["name"] = "Doan Khiet Thanh Test";
                 jsonMail["content"] = "checked successfull";
+
                 sendMailToServer(jsonMail);
                 checkCounter++;
+              }
+              else
+              {
+                string name = station["name"].as<string>();
+                Serial.print("Distance to ");
+                Serial.print(name.c_str());
+                Serial.println(" station is greater than 100m");
               }
             }
           }
@@ -464,15 +502,17 @@ bool checkDistance(float longitude, float latitude)
   return false;
 }
 
-void sendMailToServer(JsonObject object)
+void sendMailToServer(DynamicJsonDocument jsonDoc)
 {
-  String objectString;
-  serializeJson(object, objectString);
+  String jsonString;
+  serializeJson(jsonDoc, jsonString);
+  Serial.println(jsonString);
+
   String query = serverName + "mail/send";
   HTTPClient http;
   http.begin(query);
   http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(objectString);
+  int httpCode = http.POST(jsonString);
   if (httpCode > 0)
   {
     String payload = http.getString();
@@ -480,8 +520,3 @@ void sendMailToServer(JsonObject object)
   }
   http.end();
 }
-
-// void socketOnRequestTransfer(const char *payload, size_t length)
-// {
-//   Serial.printf("got socketOnRequestTransfer: %s\n", payload);
-// }
