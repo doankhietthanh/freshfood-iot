@@ -241,6 +241,174 @@ string EthereumProvider::registerOwner(string name, string description)
     }
 }
 
+string EthereumProvider::transferProduct(uint256_t productId, string newOwner)
+{
+    Contract contract(web3, this->contractAddress);
+    contract.SetPrivateKey(this->privateKey);
+
+    unsigned long long gasPriceVal = 22000000000ULL;
+    uint32_t gasLimitVal = 300000;
+    string myAddress = this->walletAddress;
+    string contractAddressStr = this->contractAddress;
+
+    uint32_t nonceVal = (uint32_t)web3->EthGetTransactionCount(&myAddress);
+    Serial.print("Nonce: ");
+    Serial.println(nonceVal);
+
+    const char *funcName = "transferProduct(uint256,address)";
+    string ret = contract.SetupContractData(funcName, &productId, &newOwner);
+
+    Serial.print("input:::");
+    Serial.println(ret.c_str());
+
+    uint256_t zeroValue = 0;
+
+    try
+    {
+        string result = contract.SendTransaction(nonceVal, gasPriceVal, gasLimitVal, &contractAddressStr, &zeroValue, &ret);
+        Serial.println(result.c_str());
+        string transactionHash = web3->getString(&result);
+        Serial.println("TX on Etherscan:");
+        Serial.print(ETHERSCAN_TX);
+        Serial.println(transactionHash.c_str()); // you can go st
+        return transactionHash;
+    }
+    catch (const char *e)
+    {
+        Serial.println(e);
+        return "Transaction is rejected";
+    }
+}
+
+string EthereumProvider::getProductByOwner(string ownerAddress)
+{
+    Contract contract(web3, this->contractAddress);
+    contract.SetPrivateKey(this->privateKey);
+
+    unsigned long long gasPriceVal = 22000000000ULL;
+    uint32_t gasLimitVal = 300000;
+    string myAddress = this->walletAddress;
+    string contractAddressStr = this->contractAddress;
+
+    uint32_t nonceVal = (uint32_t)web3->EthGetTransactionCount(&myAddress);
+    Serial.print("Nonce: ");
+    Serial.println(nonceVal);
+
+    const char *funcName = "getProductByOwner(address)";
+    string ret = contract.SetupContractData(funcName, &myAddress);
+
+    Serial.print("input:::");
+    Serial.println(ret.c_str());
+
+    uint256_t zeroValue = 0;
+
+    try
+    {
+        Serial.println("TX on Etherscan:");
+
+        string result = contract.ViewCall(&ret);
+        Serial.println(result.c_str());
+
+        string product = web3->getString(&result);
+        Serial.print(ETHERSCAN_TX);
+        Serial.println(product.c_str());
+        return product;
+    }
+    catch (const char *e)
+    {
+        Serial.println(e);
+        return "Transaction is rejected";
+    }
+}
+
+string EthereumProvider::getProduct(uint256_t productId)
+{
+    Contract contract(web3, this->contractAddress);
+    contract.SetPrivateKey(this->privateKey);
+
+    unsigned long long gasPriceVal = 22000000000ULL;
+    uint32_t gasLimitVal = 300000;
+    string myAddress = this->walletAddress;
+    string contractAddressStr = this->contractAddress;
+
+    uint32_t nonceVal = (uint32_t)web3->EthGetTransactionCount(&myAddress);
+    Serial.print("Nonce: ");
+    Serial.println(nonceVal);
+
+    const char *funcName = "getProduct(uint256)";
+    string ret = contract.SetupContractData(funcName, &productId);
+
+    Serial.print("input:::");
+    Serial.println(ret.c_str());
+
+    uint256_t zeroValue = 0;
+
+    try
+    {
+        Serial.println("TX on Etherscan:");
+
+        string result = contract.ViewCall(&ret);
+        Serial.println(result.c_str());
+
+        string product = web3->getString(&result);
+        Serial.print(ETHERSCAN_TX);
+        Serial.println(product.c_str());
+        return product;
+    }
+    catch (const char *e)
+    {
+        Serial.println(e);
+        return "Transaction is rejected";
+    }
+}
+
+string EthereumProvider::getOwnerByAddress(string ownerAddress, string &ownerName, string &ownerDescription)
+{
+    Contract contract(web3, this->contractAddress);
+    contract.SetPrivateKey(this->privateKey);
+
+    unsigned long long gasPriceVal = 22000000000ULL;
+    uint32_t gasLimitVal = 300000;
+    string contractAddressStr = this->contractAddress;
+
+    uint32_t nonceVal = (uint32_t)web3->EthGetTransactionCount(&ownerAddress);
+    Serial.print("Nonce: ");
+    Serial.println(nonceVal);
+
+    const char *funcName = "getOwnerByAddress(address)";
+    string ret = contract.SetupContractData(funcName, &ownerAddress);
+
+    Serial.print("input:::");
+    Serial.println(ret.c_str());
+
+    uint256_t zeroValue = 0;
+
+    try
+    {
+        Serial.println("TX on Etherscan:");
+
+        string result = contract.ViewCall(&ret);
+        Serial.println(result.c_str());
+
+        string transactionHash = web3->getString(&result);
+
+        transactionHash = transactionHash.substr(2, transactionHash.length());
+
+        string hex1 = transactionHash.substr((transactionHash.length() - DATA_LENGTH * 4), DATA_LENGTH * 2);
+
+        string hex2 = transactionHash.substr((transactionHash.length() - DATA_LENGTH * 2));
+
+        ownerName = RemoveBitZero(hex1);
+        ownerDescription = RemoveBitZero(hex2);
+        return transactionHash;
+    }
+    catch (const char *e)
+    {
+        Serial.println(e);
+        return "Transaction is rejected";
+    }
+}
+
 string EthereumProvider::GenerateIntToHex(int number)
 {
     std::stringstream ss;
@@ -248,4 +416,39 @@ string EthereumProvider::GenerateIntToHex(int number)
     std::string numHex(ss.str());
 
     return string(64 - numHex.length(), '0') + numHex;
+}
+
+string EthereumProvider::hexToString(const std::string &hex)
+{
+    std::string result;
+    for (size_t i = 0; i < hex.length(); i += 2)
+    {
+        std::string byteString = hex.substr(i, 2);
+        char byte = static_cast<char>(std::stoi(byteString, nullptr, 16));
+        result.push_back(byte);
+    }
+    return result;
+}
+
+string EthereumProvider::RemoveBitZero(const std::string &hex)
+{
+    string length;
+    for (int i = 0; i < 64; i++)
+    {
+        if (hex[i] == '0')
+            continue;
+        length.push_back(hex[i]);
+    }
+
+    int lengthDup = stoi(length, 0, 16) * 2;
+
+    string data;
+    for (int i = 64; i < 64 + lengthDup; i++)
+    {
+        data.push_back(hex[i]);
+    }
+
+    string result = hexToString(data);
+
+    return result;
 }

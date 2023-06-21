@@ -8,6 +8,8 @@
 #include <Util.h>
 #include <Contract.h>
 
+#define DATA_LENGTH 64
+
 // static Web3 *web3 = new Web3(SEPOLIA_ID, "izbNl_dUUKDalhy6d8SG2z0Sg6Z2dq9G");
 
 class EthereumProvider
@@ -17,6 +19,8 @@ private:
     Web3 *web3; // private key of my wallet
 
     string GenerateIntToHex(int number);
+    string RemoveBitZero(const std::string &hex);
+    string hexToString(const std::string &hex);
 
 public:
     const char *contractAddress;
@@ -33,8 +37,12 @@ public:
     string sendETHToAddress(uint256_t amount);
     string checkStr(string txt);
 
-    string addLog(uint256_t productId, string objectId, string hash, string location, string timestamp);
     string registerOwner(string name, string description);
+    string addLog(uint256_t productId, string objectId, string hash, string location, string timestamp);
+    string transferProduct(uint256_t productId, string newOwner);
+    string getProductByOwner(string ownerAddress);
+    string getProduct(uint256_t productId);
+    string getOwnerByAddress(string ownerAddress, string &ownerName, string &ownerDescription);
 };
 
 #endif

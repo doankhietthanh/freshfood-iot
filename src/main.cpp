@@ -29,9 +29,6 @@ void setup()
   initSPIFFS();
   initWifi();
 
-  // socketIo.on("request_transfer", socketOnRequestTransfer);
-  // socketIo.begin(SV_HOST, SV_PORT, "/socket.io/?transport=websocket");
-
   dataGPS = readFile(SPIFFS, gpsPath);
   Serial.print("gps: ");
   Serial.println(dataGPS);
@@ -43,6 +40,11 @@ void setup()
     ethereumProvider.setupWeb3(web3);
     ethereumProvider.setContractAddress(CONTRACT_ADDRESS);
 
+    // string newOwner = "0xEfD6bf02E65b15e22485371Fe9aC0e59804694e1";
+    // string result2 = ethereumProvider.transferProduct(0, newOwner);
+    // Serial.print("transferProduct: ");
+    // Serial.println(result2.c_str());
+
     // string result = ethereumProvider.registerOwner("GPS device", "Blockchain IoT");
     // Serial.print("registerOwner: ");
     // Serial.println(result.c_str());
@@ -51,12 +53,20 @@ void setup()
     JsonObject root = jsonDocument.as<JsonObject>();
     int productIdInt = root["productId"].as<int>();
     stations = root["stations"].as<JsonArray>();
+    newOwnerAddress = root["nextAddress"].as<string>();
 
     // convert stations to store
     serializeJson(stations, stationString);
     stationSize = stations.size();
 
     productId = productIdInt;
+
+    Serial.println("-----");
+    Serial.print("productId: ");
+    Serial.println(productIdInt);
+    Serial.print("newOwnerAddress: ");
+    Serial.println(newOwnerAddress.c_str());
+    Serial.println("-----");
 
     for (JsonObject station : stations)
     {
@@ -78,12 +88,16 @@ void setup()
 
     Serial.print("stations size: ");
     Serial.println(stations.size());
+
+    ethereumProvider.getOwnerByAddress(newOwnerAddress.c_str(), newOwnerName, newOwnerDescription);
+    Serial.print("getProductByOwner: ");
+    Serial.println(newOwnerName.c_str());
+    Serial.println(newOwnerDescription.c_str());
   }
 }
 
 void loop()
 {
-
   if (configRequested)
   {
     Serial.println("Config requested");
@@ -339,7 +353,7 @@ void gpsMode()
           digitalWrite(LED_BLOCKCHAIN, HIGH);
           if (location != "" && timestamp != "")
           {
-            string result = ethereumProvider.addLog(productId, "delivery", "delivery", location.c_str(), timestamp.c_str());
+            string result = ethereumProvider.addLog(0, "delivery", "delivery", location.c_str(), timestamp.c_str());
             if (transtactionStatus(result))
             {
               writeFile(SPIFFS, gpsPath, (location + ";" + timestamp).c_str());
@@ -347,7 +361,7 @@ void gpsMode()
           }
           else
           {
-            string gpsTemp = dataGPS.c_str(); //
+            string gpsTemp = dataGPS.c_str();
             gpsTemp = gpsTemp.substr(0, gpsTemp.find('\0')).c_str();
             string locationTemp = gpsTemp.substr(0, gpsTemp.find(';')).c_str();
             string timeTemp = gpsTemp.substr(gpsTemp.find(';') + 1, gpsTemp.length()).c_str();
@@ -356,7 +370,8 @@ void gpsMode()
               locationTemp = "0,0";
               timeTemp = "0";
             }
-            string result = ethereumProvider.addLog(productId, "delivery", "delivery", locationTemp.c_str(), timeTemp.c_str());
+            if (!transferSuccess)
+              string result = ethereumProvider.addLog(productId, "delivery", "delivery", locationTemp.c_str(), timeTemp.c_str());
           }
           digitalWrite(LED_BLOCKCHAIN, LOW);
 
@@ -374,16 +389,30 @@ void gpsMode()
             jsonArray = stationJson.as<JsonArray>();
           }
 
-          DynamicJsonDocument jsonMail(JSON_OBJECT_SIZE(4));
-          if (checkCounter == stationSize)
+          if (checkCounter == stationSize && stationSize != 0 && !transferSuccess)
           {
-            string subject = "# - Transfer to new owner";
-            jsonMail["to"] = "doankhietthanh@gmail.com";
-            jsonMail["subject"] = subject.c_str();
-            jsonMail["name"] = "Doan Khiet Thanh";
-            jsonMail["content"] = "Transfer to new owner successfull";
+            string result = ethereumProvider.transferProduct(productId, newOwnerAddress.c_str());
+            if (transtactionStatus(result))
+            {
+              writeFile(SPIFFS, gpsPath, (location + ";" + timestamp).c_str());
+            }
 
-            sendMailToServer(jsonMail);
+            std::stringstream ss;
+            ss << productId;
+            String productIdStr = String(ss.str().c_str());
+
+            String receiverAddress = String(newOwnerDescription.c_str());
+            String subject = "[TRACKING] ID: " + productIdStr;
+            String receiverName = String(newOwnerName.c_str());
+            String content = " Product is auto transfer successfull. Please check the producct on the web: https://freshfood.lalo.com.vn/tracking/" + productIdStr;
+
+            String mail = "{\"to\":\"" + receiverAddress + "\",\"subject\":\"" + subject + "\",\"name\":\"" + receiverName + "\",\"content\":\"" + content + "\"}";
+
+            Serial.println("Send mail: ");
+            Serial.println(mail);
+
+            sendMailToServer(mail);
+            transferSuccess = true;
           }
           else
           {
@@ -396,28 +425,32 @@ void gpsMode()
                 continue;
               }
 
-              Serial.print("Index ");
-              Serial.println(index);
-
               string name = station["name"].as<string>();
-              float longitude = station["longitude"].as<float>();
-              float latitude = station["latitude"].as<float>();
+              double longitude = station["longitude"].as<double>();
+              double latitude = station["latitude"].as<double>();
 
-              if (checkDistance(latitude, longitude))
+              if (checkDistance(longitude, latitude))
               {
                 Serial.print("Distance to ");
                 Serial.print(name.c_str());
                 Serial.println(" station is less than 100m");
 
-                // string subject = "Product is checked at " + name + " station";
-                char *subject;
-                sprintf(subject, "Product is checked at ", name, "station");
-                jsonMail["to"] = "doankhietthanh@gmail.com";
-                jsonMail["subject"] = subject;
-                jsonMail["name"] = "Doan Khiet Thanh Test";
-                jsonMail["content"] = "checked successfull";
+                std::stringstream ss;
+                ss << productId;
+                String productIdStr = String(ss.str().c_str());
 
-                sendMailToServer(jsonMail);
+                String receiverAddress = String(newOwnerDescription.c_str());
+                String subject = "[TRACKING] ID: " + productIdStr;
+                String receiverName = String(newOwnerName.c_str());
+                String content = "The product checked at " + String(name.c_str()) + " station.";
+                content += " Please check the producct on the web: https://freshfood.lalo.com.vn/tracking/" + productIdStr;
+
+                String mail = "{\"to\":\"" + receiverAddress + "\",\"subject\":\"" + subject + "\",\"name\":\"" + receiverName + "\",\"content\":\"" + content + "\"}";
+
+                Serial.println("Send mail: ");
+                Serial.println(mail);
+
+                sendMailToServer(mail);
                 checkCounter++;
               }
               else
@@ -490,11 +523,10 @@ DynamicJsonDocument getStationsFromServer(String ownerAddress)
   return doc;
 }
 
-bool checkDistance(float longitude, float latitude)
+bool checkDistance(double longitude, double latitude)
 {
+
   float distance = gps.distanceBetween(latitude, longitude, gps.location.lat(), gps.location.lng());
-  Serial.print("Distance: ");
-  Serial.println(distance);
   if (distance <= THREADHOLD_DISTANCE)
   {
     return true;
@@ -502,17 +534,13 @@ bool checkDistance(float longitude, float latitude)
   return false;
 }
 
-void sendMailToServer(DynamicJsonDocument jsonDoc)
+void sendMailToServer(String data)
 {
-  String jsonString;
-  serializeJson(jsonDoc, jsonString);
-  Serial.println(jsonString);
-
   String query = serverName + "mail/send";
   HTTPClient http;
   http.begin(query);
   http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(jsonString);
+  int httpCode = http.POST(data);
   if (httpCode > 0)
   {
     String payload = http.getString();
